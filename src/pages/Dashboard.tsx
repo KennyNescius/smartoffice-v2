@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore } from '../store/StoreContext';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { Package, CheckCircle, AlertCircle, RefreshCw, XOctagon } from 'lucide-react';
@@ -23,6 +23,11 @@ const STATUS_LABELS = {
 
 export const Dashboard: React.FC = () => {
   const { assets } = useStore();
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const totalAssets = assets.length;
   
@@ -73,40 +78,44 @@ export const Dashboard: React.FC = () => {
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
           <h2 className="text-lg font-semibold text-slate-800 mb-4">Статусы активов</h2>
           <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-              <PieChart>
-                <Pie
-                  data={statusData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {statusData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
+            {isMounted && (
+              <ResponsiveContainer width="99%" height="100%">
+                <PieChart width={1} height={1}>
+                  <Pie
+                    data={statusData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    {statusData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
           <h2 className="text-lg font-semibold text-slate-800 mb-4">Категории</h2>
           <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-              <BarChart data={categoryData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" />
-                <YAxis allowDecimals={false} />
-                <Tooltip cursor={{fill: 'transparent'}} />
-                <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {isMounted && (
+              <ResponsiveContainer width="99%" height="100%">
+                <BarChart data={categoryData} width={1} height={1}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip cursor={{fill: 'transparent'}} />
+                  <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
       </div>
