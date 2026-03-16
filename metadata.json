@@ -1,0 +1,5 @@
+{
+  "name": "Smart Office Asset Manager",
+  "description": "Платформа для управления активами с поддержкой QR-кодов.",
+  "requestFramePermissions": ["camera"]
+}
