@@ -25,6 +25,7 @@ export const AssetList: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [departmentFilter, setDepartmentFilter] = useState<string>('ALL');
   const [employeeFilter, setEmployeeFilter] = useState<string>('ALL');
+  const [lifespanFilter, setLifespanFilter] = useState<string[]>([]);
 
   const [assignModalAssetId, setAssignModalAssetId] = useState<string | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState<string>('');
@@ -42,6 +43,20 @@ export const AssetList: React.FC = () => {
     const matchesDepartment = departmentFilter === 'ALL' || owner?.departmentId === departmentFilter;
     const matchesEmployee = employeeFilter === 'ALL' || asset.employeeId === employeeFilter;
     
+    const matchesLifespan = lifespanFilter.length === 0 || lifespanFilter.some(filter => {
+      if (!asset.expirationDate || asset.status === 'LOST' || asset.status === 'WRITTEN_OFF') return false;
+      const expiration = new Date(asset.expirationDate);
+      const now = new Date();
+      const diffTime = expiration.getTime() - now.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (filter === 'MONTH_1') return diffDays >= 0 && diffDays <= 30;
+      if (filter === 'MONTH_3') return diffDays > 30 && diffDays <= 90;
+      if (filter === 'MONTH_6') return diffDays > 90 && diffDays <= 180;
+      if (filter === 'YEAR_1') return diffDays > 365;
+      return false;
+    });
+
     if (currentUser.role === 'USER') {
       const userEmployee = employees.find(e => `${e.firstName} ${e.lastName}` === currentUser.name.split(' (')[0]);
       if (!userEmployee || asset.employeeId !== userEmployee.id) {
@@ -49,8 +64,14 @@ export const AssetList: React.FC = () => {
       }
     }
     
-    return matchesSearch && matchesStatus && matchesDepartment && matchesEmployee;
+    return matchesSearch && matchesStatus && matchesDepartment && matchesEmployee && matchesLifespan;
   });
+
+  const handleLifespanFilterChange = (filter: string) => {
+    setLifespanFilter(prev => 
+      prev.includes(filter) ? prev.filter(f => f !== filter) : [...prev, filter]
+    );
+  };
 
   const handleAssign = () => {
     if (!assignModalAssetId) return;
@@ -143,6 +164,28 @@ export const AssetList: React.FC = () => {
               </div>
             </div>
           )}
+
+          <div className="pt-2 border-t border-gray-100">
+            <p className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wider">Оставшийся срок службы</p>
+            <div className="flex flex-wrap gap-x-6 gap-y-2">
+              {[
+                { id: 'MONTH_1', label: 'Меньше 1 месяца' },
+                { id: 'MONTH_3', label: 'До 3 месяцев' },
+                { id: 'MONTH_6', label: 'До полугода' },
+                { id: 'YEAR_1', label: 'Больше года' },
+              ].map(filter => (
+                <label key={filter.id} className="inline-flex items-center text-sm text-gray-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4 mr-2"
+                    checked={lifespanFilter.includes(filter.id)}
+                    onChange={() => handleLifespanFilterChange(filter.id)}
+                  />
+                  {filter.label}
+                </label>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -154,6 +197,9 @@ export const AssetList: React.FC = () => {
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Инв. номер
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Эксплуатация
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Статус
@@ -184,6 +230,14 @@ export const AssetList: React.FC = () => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">{asset.inventoryNumber}</div>
                         <div className="text-sm text-gray-500">SN: {asset.serialNumber}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
+                          {asset.exploitationStartDate ? new Date(asset.exploitationStartDate).toLocaleDateString('ru-RU') : '—'}
+                        </div>
+                        {asset.expirationDate && (
+                          <div className="text-xs text-gray-500">До: {new Date(asset.expirationDate).toLocaleDateString('ru-RU')}</div>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_COLORS[asset.status]}`}>

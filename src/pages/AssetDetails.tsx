@@ -24,7 +24,7 @@ const STATUS_COLORS = {
 export const AssetDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { assets, history, users, employees, departments, currentUser, changeStatus, assignAsset, returnAsset, deleteAsset } = useStore();
+  const { assets, history, users, employees, departments, currentUser, settings, changeStatus, assignAsset, returnAsset, deleteAsset } = useStore();
   
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showReturnModal, setShowReturnModal] = useState(false);
@@ -36,6 +36,8 @@ export const AssetDetails: React.FC = () => {
   const [employeeSearch, setEmployeeSearch] = useState<string>('');
   const [assignError, setAssignError] = useState<string>('');
   const [returnError, setReturnError] = useState<string>('');
+  const [extendLifespan, setExtendLifespan] = useState(false);
+  const [newExpirationDate, setNewExpirationDate] = useState<string>('');
 
   const asset = assets.find(a => a.id === id);
   const assetHistory = history.filter(h => h.assetId === id).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
@@ -93,9 +95,28 @@ export const AssetDetails: React.FC = () => {
   };
 
   const handleChangeStatus = () => {
-    changeStatus(asset.id, newStatus, reason);
+    if (asset.status === 'IN_REPAIR' && newStatus === 'REGISTERED' && !reason) {
+      setReturnError('Комментарий по ремонту обязателен');
+      return;
+    }
+    
+    changeStatus(asset.id, newStatus, reason, extendLifespan ? newExpirationDate : undefined);
     setShowStatusModal(false);
     setReason('');
+    setExtendLifespan(false);
+    setNewExpirationDate('');
+    setReturnError('');
+  };
+
+  const handleOpenStatusModal = (status: AssetStatus) => {
+    setNewStatus(status);
+    if (asset.status === 'IN_REPAIR' && status === 'REGISTERED') {
+      const currentExp = asset.expirationDate ? new Date(asset.expirationDate) : new Date();
+      const extendedDate = new Date(currentExp);
+      extendedDate.setMonth(extendedDate.getMonth() + settings.maintenanceExtensionMonths);
+      setNewExpirationDate(extendedDate.toISOString().split('T')[0]);
+    }
+    setShowStatusModal(true);
   };
 
   const handleDelete = () => {
@@ -153,6 +174,23 @@ export const AssetDetails: React.FC = () => {
                 <p className="mt-1 text-sm text-gray-900">{new Date(asset.dateAdded).toLocaleDateString('ru-RU')}</p>
               </div>
               <div>
+                <h3 className="text-sm font-medium text-gray-500">Дата закупки</h3>
+                <p className="mt-1 text-sm text-gray-900">{asset.purchaseDate ? new Date(asset.purchaseDate).toLocaleDateString('ru-RU') : '—'}</p>
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-gray-500">Дата начала эксплуатации</h3>
+                <p className="mt-1 text-sm text-gray-900">{asset.exploitationStartDate ? new Date(asset.exploitationStartDate).toLocaleDateString('ru-RU') : 'Не в эксплуатации'}</p>
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-gray-500">Срок службы до</h3>
+                <p className={`mt-1 text-sm font-medium ${
+                  asset.expirationDate && new Date(asset.expirationDate) < new Date() ? 'text-red-600' : 'text-gray-900'
+                }`}>
+                  {asset.expirationDate ? new Date(asset.expirationDate).toLocaleDateString('ru-RU') : '—'}
+                  {asset.expirationDate && new Date(asset.expirationDate) < new Date() && ' (Истек)'}
+                </p>
+              </div>
+              <div>
                 <h3 className="text-sm font-medium text-gray-500">Текущий владелец</h3>
                 <p className="mt-1 text-sm text-gray-900">{owner ? `${owner.firstName} ${owner.lastName}` : 'Нет'}</p>
               </div>
@@ -175,9 +213,9 @@ export const AssetDetails: React.FC = () => {
               )}
               
               {isAdmin && asset.status !== 'WRITTEN_OFF' && asset.status !== 'LOST' && (
-                <button onClick={() => setShowStatusModal(true)} className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50">
+                <button onClick={() => handleOpenStatusModal(asset.status === 'IN_REPAIR' ? 'REGISTERED' : 'IN_REPAIR')} className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50">
                   <RefreshCw className="w-4 h-4 mr-2" />
-                  Изменить статус
+                  {asset.status === 'IN_REPAIR' ? 'Завершить ремонт' : 'Изменить статус'}
                 </button>
               )}
               
@@ -226,6 +264,11 @@ export const AssetDetails: React.FC = () => {
                                 {event.oldStatus && event.newStatus && (
                                   <p className="text-xs text-gray-500 mt-1">
                                     {STATUS_LABELS[event.oldStatus]} &rarr; {STATUS_LABELS[event.newStatus]}
+                                  </p>
+                                )}
+                                {event.oldExpirationDate && event.newExpirationDate && event.oldExpirationDate !== event.newExpirationDate && (
+                                  <p className="text-xs text-amber-600 mt-1 font-medium">
+                                    Срок службы продлен: {new Date(event.oldExpirationDate).toLocaleDateString('ru-RU')} &rarr; {new Date(event.newExpirationDate).toLocaleDateString('ru-RU')}
                                   </p>
                                 )}
                                 {event.reason && (
@@ -359,27 +402,77 @@ export const AssetDetails: React.FC = () => {
             <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
             <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
               <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                <h3 className="text-lg leading-6 font-medium text-gray-900" id="modal-title">Изменение статуса</h3>
+                <h3 className="text-lg leading-6 font-medium text-gray-900" id="modal-title">
+                  {asset.status === 'IN_REPAIR' && newStatus === 'REGISTERED' ? 'Завершение ремонта' : 'Изменение статуса'}
+                </h3>
                 <div className="mt-4 space-y-4">
+                  {!(asset.status === 'IN_REPAIR' && newStatus === 'REGISTERED') && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Новый статус</label>
+                      <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as AssetStatus)} className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                        {Object.entries(STATUS_LABELS).map(([key, label]) => (
+                          <option key={key} value={key}>{label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Новый статус</label>
-                    <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as AssetStatus)} className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
-                      {Object.entries(STATUS_LABELS).map(([key, label]) => (
-                        <option key={key} value={key}>{label}</option>
-                      ))}
-                    </select>
+                    <label className="block text-sm font-medium text-gray-700">
+                      {asset.status === 'IN_REPAIR' && newStatus === 'REGISTERED' ? 'Что было сделано (Комментарий)' : 'Причина / Комментарий'}
+                      {asset.status === 'IN_REPAIR' && newStatus === 'REGISTERED' && <span className="text-red-500">*</span>}
+                    </label>
+                    <textarea 
+                      value={reason} 
+                      onChange={(e) => { setReason(e.target.value); setReturnError(''); }} 
+                      rows={3} 
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" 
+                      placeholder={asset.status === 'IN_REPAIR' && newStatus === 'REGISTERED' ? "Опишите проведенные работы..." : ""}
+                    />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Причина / Комментарий</label>
-                    <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
-                  </div>
+
+                  {asset.status === 'IN_REPAIR' && newStatus === 'REGISTERED' && (
+                    <div className="space-y-4 pt-2 border-t border-gray-100">
+                      <div className="flex items-center">
+                        <input
+                          id="extend-lifespan"
+                          type="checkbox"
+                          checked={extendLifespan}
+                          onChange={(e) => setExtendLifespan(e.target.checked)}
+                          className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                        />
+                        <label htmlFor="extend-lifespan" className="ml-2 block text-sm text-gray-900">
+                          Продлить срок службы
+                        </label>
+                      </div>
+
+                      {extendLifespan && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Новая дата окончания</label>
+                          <input
+                            type="date"
+                            value={newExpirationDate}
+                            onChange={(e) => setNewExpirationDate(e.target.value)}
+                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                          />
+                          <p className="mt-1 text-xs text-gray-500">
+                            Автоматически предложено +{settings.maintenanceExtensionMonths} мес. к текущему сроку
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {returnError && (
+                    <p className="text-sm text-red-600 font-medium">{returnError}</p>
+                  )}
                 </div>
               </div>
               <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
                 <button type="button" onClick={handleChangeStatus} className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:ml-3 sm:w-auto sm:text-sm">
-                  Сохранить
+                  {asset.status === 'IN_REPAIR' && newStatus === 'REGISTERED' ? 'Завершить ремонт' : 'Сохранить'}
                 </button>
-                <button type="button" onClick={() => setShowStatusModal(false)} className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+                <button type="button" onClick={() => { setShowStatusModal(false); setReturnError(''); setExtendLifespan(false); }} className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
                   Отмена
                 </button>
               </div>

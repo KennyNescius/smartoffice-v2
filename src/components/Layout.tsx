@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { QrCode, LayoutDashboard, Package, UserCircle, Users } from 'lucide-react';
+import { QrCode, LayoutDashboard, Package, UserCircle, Users, Settings } from 'lucide-react';
 import { useStore } from '../store/StoreContext';
 import { cn } from '../lib/utils';
 
@@ -13,7 +13,10 @@ export const Layout: React.FC = () => {
     { path: '/assets', label: 'Активы', icon: Package },
     { path: '/employees', label: 'Сотрудники', icon: Users },
     { path: '/scan', label: 'Сканер', icon: QrCode },
+    { path: '/settings', label: 'Настройки', icon: Settings, adminOnly: true },
   ];
+
+  const filteredNavItems = navItems.filter(item => !item.adminOnly || currentUser.role === 'ADMIN');
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -25,7 +28,7 @@ export const Layout: React.FC = () => {
                 <span className="text-xl font-bold text-indigo-600 tracking-tight">SmartOffice</span>
               </div>
               <nav className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                {navItems.map((item) => {
+                {filteredNavItems.map((item) => {
                   const Icon = item.icon;
                   const isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
                   return (
@@ -73,7 +76,7 @@ export const Layout: React.FC = () => {
       {/* Mobile bottom navigation */}
       <div className="sm:hidden fixed bottom-0 w-full bg-white border-t border-slate-200 z-10 pb-safe print:hidden">
         <div className="flex justify-around">
-          {navItems.map((item) => {
+          {filteredNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
             return (

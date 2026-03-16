@@ -29,6 +29,10 @@ export interface Asset {
   status: AssetStatus;
   employeeId?: string | null;
   photoUrl?: string;
+  purchaseDate?: string;
+  expirationDate?: string;
+  lifespanMonths?: number;
+  exploitationStartDate?: string;
 }
 
 export interface AssetHistory {
@@ -41,6 +45,12 @@ export interface AssetHistory {
   newStatus: AssetStatus;
   reason?: string;
   action: string;
+  oldExpirationDate?: string;
+  newExpirationDate?: string;
+}
+
+export interface Settings {
+  maintenanceExtensionMonths: number;
 }
 
 export interface User {

@@ -12,6 +12,7 @@ import { AssetDetails } from './pages/AssetDetails';
 import { AssetForm } from './pages/AssetForm';
 import { QRScanner } from './pages/QRScanner';
 import { Employees } from './pages/Employees';
+import { Settings } from './pages/Settings';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 export default function App() {
@@ -27,6 +28,7 @@ export default function App() {
               <Route path="assets/:id" element={<AssetDetails />} />
               <Route path="employees" element={<Employees />} />
               <Route path="scan" element={<QRScanner />} />
+              <Route path="settings" element={<Settings />} />
             </Route>
           </Routes>
         </Router>

@@ -14,6 +14,9 @@ export const AssetForm: React.FC = () => {
     category: 'IT' as AssetCategory,
     serialNumber: '',
     inventoryNumber: '',
+    purchaseDate: new Date().toISOString().split('T')[0],
+    lifespanMonths: undefined as number | undefined,
+    expirationDate: '',
   });
 
   if (currentUser.role !== 'ADMIN') {
@@ -36,7 +39,21 @@ export const AssetForm: React.FC = () => {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData(prev => {
+      const newData = { ...prev, [name]: value };
+      
+      // If purchaseDate or lifespanMonths changes, and we want to auto-calculate expirationDate
+      // Note: Requirement 6 says it should be from exploitationStartDate if months are used,
+      // but Requirement 2/3.1 suggests auto-calculation at creation too.
+      // We'll allow manual override or auto-calc from purchaseDate as a fallback if not yet exploited.
+      if ((name === 'purchaseDate' || name === 'lifespanMonths') && newData.lifespanMonths && !newData.expirationDate) {
+        const date = new Date(newData.purchaseDate);
+        date.setMonth(date.getMonth() + Number(newData.lifespanMonths));
+        newData.expirationDate = date.toISOString().split('T')[0];
+      }
+      
+      return newData;
+    });
   };
 
   return (
@@ -139,6 +156,58 @@ export const AssetForm: React.FC = () => {
                   onChange={handleChange}
                   className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md py-2 px-3 border font-mono"
                   placeholder="SN12345678"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="purchaseDate" className="block text-sm font-medium text-gray-700">
+                Дата закупки
+              </label>
+              <div className="mt-1">
+                <input
+                  type="date"
+                  name="purchaseDate"
+                  id="purchaseDate"
+                  required
+                  value={formData.purchaseDate}
+                  onChange={handleChange}
+                  className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md py-2 px-3 border"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="lifespanMonths" className="block text-sm font-medium text-gray-700">
+                Срок службы (мес.)
+              </label>
+              <div className="mt-1">
+                <input
+                  type="number"
+                  name="lifespanMonths"
+                  id="lifespanMonths"
+                  min="1"
+                  value={formData.lifespanMonths || ''}
+                  onChange={handleChange}
+                  className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md py-2 px-3 border"
+                  placeholder="Например: 36"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="expirationDate" className="block text-sm font-medium text-gray-700">
+                Срок службы до
+              </label>
+              <div className="mt-1">
+                <input
+                  type="date"
+                  name="expirationDate"
+                  id="expirationDate"
+                  min={formData.purchaseDate}
+                  value={formData.expirationDate}
+                  onChange={handleChange}
+                  className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md py-2 px-3 border"
                 />
               </div>
             </div>

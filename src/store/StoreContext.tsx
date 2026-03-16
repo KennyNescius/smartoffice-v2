@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { Asset, AssetHistory, AssetStatus, Department, Employee, Role, User } from '../types';
+import { Asset, AssetHistory, AssetStatus, Department, Employee, Role, Settings, User } from '../types';
 
 interface StoreState {
   assets: Asset[];
@@ -9,12 +9,13 @@ interface StoreState {
   departments: Department[];
   employees: Employee[];
   currentUser: User;
+  settings: Settings;
 }
 
 interface StoreContextType extends StoreState {
   addAsset: (asset: Omit<Asset, 'id' | 'status' | 'dateAdded'>) => void;
   updateAsset: (id: string, updates: Partial<Asset>, reason?: string) => void;
-  changeStatus: (id: string, newStatus: AssetStatus, reason?: string) => void;
+  changeStatus: (id: string, newStatus: AssetStatus, reason?: string, newExpirationDate?: string) => void;
   assignAsset: (id: string, employeeId: string, reason?: string) => void;
   returnAsset: (id: string, reason: string) => void;
   deleteAsset: (id: string) => void;
@@ -23,6 +24,7 @@ interface StoreContextType extends StoreState {
   deleteDepartment: (id: string) => void;
   addEmployee: (employee: Omit<Employee, 'id' | 'isActive'>) => void;
   deactivateEmployee: (id: string) => void;
+  updateSettings: (settings: Partial<Settings>) => void;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -93,6 +95,16 @@ const initialHistory: AssetHistory[] = [
   },
 ];
 
+const initialSettings: Settings = {
+  maintenanceExtensionMonths: 6,
+};
+
+const calculateExpirationDate = (startDate: string, months: number): string => {
+  const date = new Date(startDate);
+  date.setMonth(date.getMonth() + months);
+  return date.toISOString();
+};
+
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, setState] = useState<StoreState>(() => {
     const saved = localStorage.getItem('smart_office_state');
@@ -106,6 +118,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           departments: parsed.departments || initialDepartments,
           employees: parsed.employees || initialEmployees,
           currentUser: parsed.currentUser || initialUsers[0],
+          settings: parsed.settings || initialSettings,
         };
       } catch (e) {
         console.error('Failed to parse state from localStorage', e);
@@ -118,6 +131,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       departments: initialDepartments,
       employees: initialEmployees,
       currentUser: initialUsers[0],
+      settings: initialSettings,
     };
   });
 
@@ -125,7 +139,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     localStorage.setItem('smart_office_state', JSON.stringify(state));
   }, [state]);
 
-  const logAction = (assetId: string, action: string, newStatus: AssetStatus, oldStatus?: AssetStatus, reason?: string) => {
+  const logAction = (
+    assetId: string, 
+    action: string, 
+    newStatus: AssetStatus, 
+    oldStatus?: AssetStatus, 
+    reason?: string,
+    oldExpirationDate?: string,
+    newExpirationDate?: string
+  ) => {
     const log: AssetHistory = {
       id: uuidv4(),
       assetId,
@@ -135,6 +157,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       newStatus,
       reason,
       action,
+      oldExpirationDate,
+      newExpirationDate,
     };
     setState((prev) => ({ ...prev, history: [log, ...prev.history] }));
   };
@@ -164,16 +188,32 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
-  const changeStatus = (id: string, newStatus: AssetStatus, reason?: string) => {
+  const changeStatus = (id: string, newStatus: AssetStatus, reason?: string, newExpirationDate?: string) => {
     setState((prev) => {
       const asset = prev.assets.find((a) => a.id === id);
       if (!asset) return prev;
       
       const oldStatus = asset.status;
-      const newAssets = prev.assets.map((a) => (a.id === id ? { ...a, status: newStatus } : a));
+      const isFirstAssignment = newStatus === 'ASSIGNED' && !asset.exploitationStartDate && oldStatus === 'REGISTERED';
       
-      // Schedule logging after state update to avoid stale closures, but for simplicity we do it directly
-      setTimeout(() => logAction(id, 'Изменен статус', newStatus, oldStatus, reason), 0);
+      const exploitationStartDate = isFirstAssignment ? new Date().toISOString() : asset.exploitationStartDate;
+      let expirationDate = newExpirationDate || asset.expirationDate;
+      
+      if (isFirstAssignment && asset.lifespanMonths && !newExpirationDate) {
+        expirationDate = calculateExpirationDate(exploitationStartDate!, asset.lifespanMonths);
+      }
+
+      const newAssets = prev.assets.map((a) => (a.id === id ? { ...a, status: newStatus, exploitationStartDate, expirationDate } : a));
+      
+      setTimeout(() => logAction(
+        id, 
+        'Изменен статус', 
+        newStatus, 
+        oldStatus, 
+        reason,
+        asset.expirationDate,
+        expirationDate
+      ), 0);
       
       return { ...prev, assets: newAssets };
     });
@@ -185,7 +225,16 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (!asset) return prev;
       
       const oldStatus = asset.status;
-      const newAssets = prev.assets.map((a) => (a.id === id ? { ...a, status: 'ASSIGNED', employeeId } : a));
+      const isFirstAssignment = !asset.exploitationStartDate && oldStatus === 'REGISTERED';
+      
+      const exploitationStartDate = isFirstAssignment ? new Date().toISOString() : asset.exploitationStartDate;
+      let expirationDate = asset.expirationDate;
+      
+      if (isFirstAssignment && asset.lifespanMonths) {
+        expirationDate = calculateExpirationDate(exploitationStartDate!, asset.lifespanMonths);
+      }
+
+      const newAssets = prev.assets.map((a) => (a.id === id ? { ...a, status: 'ASSIGNED', employeeId, exploitationStartDate, expirationDate } : a));
       
       setTimeout(() => logAction(id, 'Назначен владелец', 'ASSIGNED', oldStatus, reason), 0);
       
@@ -271,6 +320,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
   };
 
+  const updateSettings = (newSettings: Partial<Settings>) => {
+    setState((prev) => ({
+      ...prev,
+      settings: { ...prev.settings, ...newSettings },
+    }));
+  };
+
   return (
     <StoreContext.Provider
       value={{
@@ -286,6 +342,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         deleteDepartment,
         addEmployee,
         deactivateEmployee,
+        updateSettings,
       }}
     >
       {children}
