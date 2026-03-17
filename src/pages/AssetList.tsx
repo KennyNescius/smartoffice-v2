@@ -1,23 +1,10 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useStore } from '../store/StoreContext';
-import { Search, Plus, Filter, UserPlus } from 'lucide-react';
+import { Search, Plus, Filter, UserPlus, Package, Download } from 'lucide-react';
+import { STATUS_LABELS, STATUS_COLORS } from '../lib/constants';
+import { toast } from 'sonner';
 
-const STATUS_LABELS = {
-  REGISTERED: 'На складе',
-  ASSIGNED: 'Выдан',
-  IN_REPAIR: 'В ремонте',
-  LOST: 'Утерян',
-  WRITTEN_OFF: 'Списан',
-};
-
-const STATUS_COLORS = {
-  REGISTERED: 'bg-blue-100 text-blue-800',
-  ASSIGNED: 'bg-emerald-100 text-emerald-800',
-  IN_REPAIR: 'bg-amber-100 text-amber-800',
-  LOST: 'bg-red-100 text-red-800',
-  WRITTEN_OFF: 'bg-gray-100 text-gray-800',
-};
 
 export const AssetList: React.FC = () => {
   const { assets, currentUser, employees, departments, assignAsset } = useStore();
@@ -53,6 +40,7 @@ export const AssetList: React.FC = () => {
       if (filter === 'MONTH_1') return diffDays >= 0 && diffDays <= 30;
       if (filter === 'MONTH_3') return diffDays > 30 && diffDays <= 90;
       if (filter === 'MONTH_6') return diffDays > 90 && diffDays <= 180;
+      if (filter === 'YEAR_UNDER_1') return diffDays > 180 && diffDays <= 365;
       if (filter === 'YEAR_1') return diffDays > 365;
       return false;
     });
@@ -73,13 +61,54 @@ export const AssetList: React.FC = () => {
     );
   };
 
-  const handleAssign = () => {
+  const handleExportCSV = () => {
+    const BOM = '\uFEFF';
+    const headers = ['Наименование', 'Тип', 'Категория', 'Серийный номер', 'Инв. номер', 'Статус', 'Владелец', 'Департамент', 'Дата добавления', 'Начало эксплуатации', 'Срок до'];
+    const rows = filteredAssets.map(asset => {
+      const owner = employees.find(e => e.id === asset.employeeId);
+      const dept = owner ? departments.find(d => d.id === owner.departmentId) : null;
+      return [
+        asset.name,
+        asset.type,
+        asset.category,
+        asset.serialNumber,
+        asset.inventoryNumber,
+        STATUS_LABELS[asset.status],
+        owner ? `${owner.firstName} ${owner.lastName}` : '',
+        dept?.name || '',
+        new Date(asset.dateAdded).toLocaleDateString('ru-RU'),
+        asset.exploitationStartDate ? new Date(asset.exploitationStartDate).toLocaleDateString('ru-RU') : '',
+        asset.expirationDate ? new Date(asset.expirationDate).toLocaleDateString('ru-RU') : '',
+      ];
+    });
+
+    const csvContent = BOM + [headers, ...rows]
+      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(';'))
+      .join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `assets_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Выгружено ${filteredAssets.length} активов`);
+  };
+
+  const handleAssign = async () => {
     if (!assignModalAssetId) return;
     if (!selectedEmployee) {
       setAssignError('Пожалуйста, выберите сотрудника из списка');
       return;
     }
-    assignAsset(assignModalAssetId, selectedEmployee, assignReason);
+    try {
+      await assignAsset(assignModalAssetId, selectedEmployee, assignReason);
+      toast.success('Актив выдан сотруднику');
+    } catch (err: any) {
+      toast.error(err.message);
+      return;
+    }
     setAssignModalAssetId(null);
     setSelectedEmployee('');
     setAssignReason('');
@@ -93,15 +122,26 @@ export const AssetList: React.FC = () => {
         <h1 className="text-2xl font-bold text-slate-900">
           {currentUser.role === 'USER' ? 'Мои активы' : 'Все активы'}
         </h1>
-        {currentUser.role === 'ADMIN' && (
-          <Link
-            to="/assets/new"
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Добавить актив
-          </Link>
-        )}
+        <div className="flex gap-2">
+          {(currentUser.role === 'ADMIN' || currentUser.role === 'AUDITOR') && (
+            <button
+              onClick={handleExportCSV}
+              className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Выгрузить CSV
+            </button>
+          )}
+          {currentUser.role === 'ADMIN' && (
+            <Link
+              to="/assets/new"
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Добавить актив
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -172,6 +212,7 @@ export const AssetList: React.FC = () => {
                 { id: 'MONTH_1', label: 'Меньше 1 месяца' },
                 { id: 'MONTH_3', label: 'До 3 месяцев' },
                 { id: 'MONTH_6', label: 'До полугода' },
+                { id: 'YEAR_UNDER_1', label: 'До 1 года' },
                 { id: 'YEAR_1', label: 'Больше года' },
               ].map(filter => (
                 <label key={filter.id} className="inline-flex items-center text-sm text-gray-700 cursor-pointer">
@@ -221,6 +262,17 @@ export const AssetList: React.FC = () => {
                     <tr key={asset.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
+                          {asset.photoUrl ? (
+                            <img
+                              src={`http://localhost:3001${asset.photoUrl}`}
+                              alt={asset.name}
+                              className="h-10 w-10 rounded-lg object-cover border border-gray-200 flex-shrink-0"
+                            />
+                          ) : (
+                            <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                              <Package className="w-5 h-5 text-gray-400" />
+                            </div>
+                          )}
                           <div className="ml-4">
                             <div className="text-sm font-medium text-gray-900">{asset.name}</div>
                             <div className="text-sm text-gray-500">{asset.category} • {asset.type}</div>
@@ -267,7 +319,7 @@ export const AssetList: React.FC = () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan={5} className="px-6 py-10 text-center text-sm text-gray-500">
+                  <td colSpan={6} className="px-6 py-10 text-center text-sm text-gray-500">
                     Активы не найдены
                   </td>
                 </tr>

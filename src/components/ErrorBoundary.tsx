@@ -44,12 +44,11 @@ export class ErrorBoundary extends Component<Props, State> {
             <div className="mt-6 text-center">
               <button
                 onClick={() => {
-                  localStorage.removeItem('smart_office_state');
                   window.location.href = '/';
                 }}
                 className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
               >
-                Сбросить данные и перезагрузить
+                Перезагрузить приложение
               </button>
             </div>
           </div>

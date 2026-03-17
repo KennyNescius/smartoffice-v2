@@ -1,21 +1,25 @@
 import React, { useState } from 'react';
 import { useStore } from '../store/StoreContext';
-import { Building2, Users, Plus, Search, CheckCircle2, XCircle, Trash2 } from 'lucide-react';
+import { Building2, Users, Plus, Search, CheckCircle2, XCircle, Trash2, Mail, Shield } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { toast } from 'sonner';
 
 export const Employees: React.FC = () => {
   const { departments, employees, addDepartment, deleteDepartment, addEmployee, deactivateEmployee, currentUser } = useStore();
   const [activeTab, setActiveTab] = useState<'employees' | 'departments'>('employees');
-  
+
   // Department Form
   const [newDeptName, setNewDeptName] = useState('');
-  
+
   // Employee Form
   const [showEmpForm, setShowEmpForm] = useState(false);
   const [empFirstName, setEmpFirstName] = useState('');
   const [empLastName, setEmpLastName] = useState('');
   const [empPosition, setEmpPosition] = useState('');
   const [empDeptId, setEmpDeptId] = useState('');
+  const [empEmail, setEmpEmail] = useState('');
+  const [empPassword, setEmpPassword] = useState('');
+  const [empRole, setEmpRole] = useState('USER');
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -23,28 +27,54 @@ export const Employees: React.FC = () => {
 
   const isAdmin = currentUser.role === 'ADMIN';
 
-  const handleAddDepartment = (e: React.FormEvent) => {
+  const handleAddDepartment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newDeptName.trim()) {
-      addDepartment(newDeptName.trim());
-      setNewDeptName('');
+      try {
+        await addDepartment(newDeptName.trim());
+        setNewDeptName('');
+        toast.success('Департамент добавлен');
+      } catch (err: any) {
+        toast.error(err.message);
+      }
     }
   };
 
-  const handleAddEmployee = (e: React.FormEvent) => {
+  const handleAddEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (empFirstName && empLastName && empPosition && empDeptId) {
-      addEmployee({
+    if (!empFirstName || !empLastName || !empPosition || !empDeptId) {
+      toast.error('Заполните все обязательные поля');
+      return;
+    }
+    if (!empEmail || !empPassword) {
+      toast.error('Email и пароль обязательны для создания аккаунта');
+      return;
+    }
+    if (empPassword.length < 6) {
+      toast.error('Пароль должен быть не менее 6 символов');
+      return;
+    }
+    try {
+      await addEmployee({
         firstName: empFirstName.trim(),
         lastName: empLastName.trim(),
         position: empPosition.trim(),
         departmentId: empDeptId,
+        email: empEmail.trim(),
+        password: empPassword,
+        role: empRole,
       });
       setShowEmpForm(false);
       setEmpFirstName('');
       setEmpLastName('');
       setEmpPosition('');
       setEmpDeptId('');
+      setEmpEmail('');
+      setEmpPassword('');
+      setEmpRole('USER');
+      toast.success('Сотрудник добавлен и аккаунт создан');
+    } catch (err: any) {
+      toast.error(err.message);
     }
   };
 
@@ -108,7 +138,7 @@ export const Employees: React.FC = () => {
                 value={newDeptName}
                 onChange={(e) => setNewDeptName(e.target.value)}
                 placeholder="Название департамента"
-                className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2 border"
                 required
               />
               <button
@@ -149,9 +179,14 @@ export const Employees: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button
-                          onClick={() => {
+                          onClick={async () => {
                             if (window.confirm('Вы уверены, что хотите удалить этот департамент?')) {
-                              deleteDepartment(dept.id);
+                              try {
+                                await deleteDepartment(dept.id);
+                                toast.success('Департамент удален');
+                              } catch (err: any) {
+                                toast.error(err.message);
+                              }
                             }
                           }}
                           className="text-red-600 hover:text-red-900"
@@ -195,7 +230,7 @@ export const Employees: React.FC = () => {
               <select
                 value={filterDept}
                 onChange={(e) => setFilterDept(e.target.value)}
-                className="block w-48 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+                className="block w-48 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md border"
               >
                 <option value="all">Все департаменты</option>
                 {departments.map((d) => (
@@ -217,54 +252,104 @@ export const Employees: React.FC = () => {
           {showEmpForm && (
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
               <h3 className="text-lg font-medium text-gray-900 mb-4">Новый сотрудник</h3>
-              <form onSubmit={handleAddEmployee} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Имя</label>
-                  <input
-                    type="text"
-                    value={empFirstName}
-                    onChange={(e) => setEmpFirstName(e.target.value)}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                    required
-                  />
+              <form onSubmit={handleAddEmployee} className="space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Имя <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      value={empFirstName}
+                      onChange={(e) => setEmpFirstName(e.target.value)}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2 border"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Фамилия <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      value={empLastName}
+                      onChange={(e) => setEmpLastName(e.target.value)}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2 border"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Должность <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      value={empPosition}
+                      onChange={(e) => setEmpPosition(e.target.value)}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2 border"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Департамент <span className="text-red-500">*</span></label>
+                    <select
+                      value={empDeptId}
+                      onChange={(e) => setEmpDeptId(e.target.value)}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2 border bg-white"
+                      required
+                    >
+                      <option value="">Выберите департамент</option>
+                      {departments.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Фамилия</label>
-                  <input
-                    type="text"
-                    value={empLastName}
-                    onChange={(e) => setEmpLastName(e.target.value)}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                    required
-                  />
+
+                <div className="border-t border-gray-200 pt-4">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
+                    <Shield className="w-4 h-4 mr-2 text-indigo-500" />
+                    Учетная запись
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        <Mail className="w-3.5 h-3.5 inline mr-1" />
+                        Email (логин) <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="email"
+                        value={empEmail}
+                        onChange={(e) => setEmpEmail(e.target.value)}
+                        placeholder="employee@company.com"
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2 border"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Пароль <span className="text-red-500">*</span></label>
+                      <input
+                        type="password"
+                        value={empPassword}
+                        onChange={(e) => setEmpPassword(e.target.value)}
+                        placeholder="Мин. 6 символов"
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2 border"
+                        required
+                        minLength={6}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Уровень доступа <span className="text-red-500">*</span></label>
+                      <select
+                        value={empRole}
+                        onChange={(e) => setEmpRole(e.target.value)}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2 border bg-white"
+                      >
+                        <option value="USER">Сотрудник</option>
+                        <option value="AUDITOR">Аудитор</option>
+                        <option value="ADMIN">Администратор</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Должность</label>
-                  <input
-                    type="text"
-                    value={empPosition}
-                    onChange={(e) => setEmpPosition(e.target.value)}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Департамент</label>
-                  <select
-                    value={empDeptId}
-                    onChange={(e) => setEmpDeptId(e.target.value)}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                    required
-                  >
-                    <option value="">Выберите департамент</option>
-                    {departments.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="sm:col-span-2 flex justify-end gap-3 mt-2">
+
+                <div className="flex justify-end gap-3">
                   <button
                     type="button"
                     onClick={() => setShowEmpForm(false)}
@@ -276,7 +361,7 @@ export const Employees: React.FC = () => {
                     type="submit"
                     className="px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                   >
-                    Сохранить
+                    Создать сотрудника и аккаунт
                   </button>
                 </div>
               </form>
@@ -336,9 +421,14 @@ export const Employees: React.FC = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         {emp.isActive && (
                           <button
-                            onClick={() => {
+                            onClick={async () => {
                               if (window.confirm('Вы уверены, что хотите деактивировать этого сотрудника?')) {
-                                deactivateEmployee(emp.id);
+                                try {
+                                  await deactivateEmployee(emp.id);
+                                  toast.success('Сотрудник деактивирован');
+                                } catch (err: any) {
+                                  toast.error(err.message);
+                                }
                               }
                             }}
                             className="text-red-600 hover:text-red-900"

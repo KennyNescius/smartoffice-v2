@@ -1,31 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStore } from '../store/StoreContext';
 import { QRCodeSVG } from 'qrcode.react';
-import { ArrowLeft, Edit, Trash2, UserPlus, ArrowDownLeft, AlertTriangle, RefreshCw, XCircle, Printer } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, UserPlus, ArrowDownLeft, AlertTriangle, RefreshCw, XCircle, Printer, Upload, Image } from 'lucide-react';
 import { AssetStatus } from '../types';
+import { STATUS_LABELS, STATUS_COLORS } from '../lib/constants';
+import { api } from '../lib/api';
+import { toast } from 'sonner';
 
-const STATUS_LABELS = {
-  REGISTERED: 'На складе',
-  ASSIGNED: 'Выдан',
-  IN_REPAIR: 'В ремонте',
-  LOST: 'Утерян',
-  WRITTEN_OFF: 'Списан',
-};
-
-const STATUS_COLORS = {
-  REGISTERED: 'bg-blue-100 text-blue-800',
-  ASSIGNED: 'bg-emerald-100 text-emerald-800',
-  IN_REPAIR: 'bg-amber-100 text-amber-800',
-  LOST: 'bg-red-100 text-red-800',
-  WRITTEN_OFF: 'bg-gray-100 text-gray-800',
-};
 
 export const AssetDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { assets, history, users, employees, departments, currentUser, settings, changeStatus, assignAsset, returnAsset, deleteAsset } = useStore();
-  
+  const { assets, history, users, employees, departments, currentUser, settings, changeStatus, assignAsset, returnAsset, deleteAsset, refreshData } = useStore();
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
@@ -71,36 +60,36 @@ export const AssetDetails: React.FC = () => {
     );
   }
 
-  const handleAssign = () => {
+  const handleAssign = async () => {
     if (!selectedEmployee) {
       setAssignError('Пожалуйста, выберите сотрудника из списка');
       return;
     }
-    assignAsset(asset.id, selectedEmployee, reason);
+    await assignAsset(asset.id, selectedEmployee, reason);
     setShowAssignModal(false);
     setReason('');
     setEmployeeSearch('');
     setAssignError('');
   };
 
-  const handleReturn = () => {
+  const handleReturn = async () => {
     if (!reason && isAdmin) {
       setReturnError('Комментарий обязателен при возврате');
       return;
     }
-    returnAsset(asset.id, reason);
+    await returnAsset(asset.id, reason);
     setShowReturnModal(false);
     setReason('');
     setReturnError('');
   };
 
-  const handleChangeStatus = () => {
+  const handleChangeStatus = async () => {
     if (asset.status === 'IN_REPAIR' && newStatus === 'REGISTERED' && !reason) {
       setReturnError('Комментарий по ремонту обязателен');
       return;
     }
     
-    changeStatus(asset.id, newStatus, reason, extendLifespan ? newExpirationDate : undefined);
+    await changeStatus(asset.id, newStatus, reason, extendLifespan ? newExpirationDate : undefined);
     setShowStatusModal(false);
     setReason('');
     setExtendLifespan(false);
@@ -119,9 +108,27 @@ export const AssetDetails: React.FC = () => {
     setShowStatusModal(true);
   };
 
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const maxSize = 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      toast.error('Файл слишком большой (макс. 5МБ)');
+      return;
+    }
+    try {
+      await api.uploadAssetPhoto(asset.id, file);
+      toast.success('Фото загружено');
+      await refreshData();
+    } catch (err: any) {
+      toast.error(err.message || 'Ошибка загрузки');
+    }
+  };
+
   const handleDelete = () => {
     if (window.confirm('Вы уверены, что хотите удалить этот актив?')) {
       deleteAsset(asset.id);
+      toast.success('Актив удален');
       navigate('/assets');
     }
   };
@@ -205,7 +212,7 @@ export const AssetDetails: React.FC = () => {
                 </button>
               )}
               
-              {(isAdmin || isOwner) && asset.status === 'ASSIGNED' && (
+              {isAdmin && asset.status === 'ASSIGNED' && (
                 <button onClick={() => setShowReturnModal(true)} className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50">
                   <ArrowDownLeft className="w-4 h-4 mr-2" />
                   Вернуть на склад
@@ -226,7 +233,7 @@ export const AssetDetails: React.FC = () => {
                 </button>
               )}
               
-              {isOwner && asset.status === 'ASSIGNED' && (
+              {(isOwner || currentUser.role === 'AUDITOR') && asset.status === 'ASSIGNED' && (
                 <button onClick={() => { setNewStatus('IN_REPAIR'); setShowStatusModal(true); }} className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-amber-600 hover:bg-amber-700">
                   <AlertTriangle className="w-4 h-4 mr-2" />
                   Сообщить о поломке
@@ -293,10 +300,59 @@ export const AssetDetails: React.FC = () => {
         </div>
 
         <div className="space-y-6">
+          {/* Photo Section */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+              <Image className="w-5 h-5 mr-2 text-gray-400" />
+              Фото актива
+            </h3>
+            {asset.photoUrl ? (
+              <div className="space-y-3">
+                <img
+                  src={`http://localhost:3001${asset.photoUrl}`}
+                  alt={asset.name}
+                  className="w-full rounded-lg border border-gray-200 object-contain bg-gray-50"
+                  style={{ maxHeight: '300px' }}
+                />
+                {isAdmin && (
+                  <button
+                    onClick={() => photoInputRef.current?.click()}
+                    className="w-full inline-flex justify-center items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                  >
+                    <Upload className="w-4 h-4 mr-2" />
+                    Заменить фото
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div>
+                {isAdmin ? (
+                  <div
+                    onClick={() => photoInputRef.current?.click()}
+                    className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition-colors"
+                  >
+                    <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-sm text-gray-600">Загрузить фото</p>
+                    <p className="text-xs text-gray-400 mt-1">JPG, PNG, WebP до 5МБ</p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-400 text-center py-4">Фото не загружено</p>
+                )}
+              </div>
+            )}
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={handlePhotoUpload}
+              className="hidden"
+            />
+          </div>
+
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col items-center justify-center">
             <h3 className="text-lg font-medium text-gray-900 mb-4">QR-код актива</h3>
             <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-              <QRCodeSVG value={asset.id} size={200} level="H" includeMargin={true} />
+              <QRCodeSVG value={`${window.location.origin}/assets/${asset.id}`} size={200} level="H" includeMargin={true} />
             </div>
             <p className="text-sm text-gray-500 mt-4 text-center">
               Отсканируйте код для быстрого доступа к карточке
@@ -406,7 +462,7 @@ export const AssetDetails: React.FC = () => {
                   {asset.status === 'IN_REPAIR' && newStatus === 'REGISTERED' ? 'Завершение ремонта' : 'Изменение статуса'}
                 </h3>
                 <div className="mt-4 space-y-4">
-                  {!(asset.status === 'IN_REPAIR' && newStatus === 'REGISTERED') && (
+                  {isAdmin && !(asset.status === 'IN_REPAIR' && newStatus === 'REGISTERED') && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700">Новый статус</label>
                       <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as AssetStatus)} className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
@@ -414,6 +470,13 @@ export const AssetDetails: React.FC = () => {
                           <option key={key} value={key}>{label}</option>
                         ))}
                       </select>
+                    </div>
+                  )}
+                  {!isAdmin && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-md p-3">
+                      <p className="text-sm text-amber-800">
+                        Статус будет изменён на: <span className="font-semibold">На ремонте</span>
+                      </p>
                     </div>
                   )}
                   
@@ -488,7 +551,7 @@ export const AssetDetails: React.FC = () => {
           <p className="text-2xl text-gray-600">INV: {asset.inventoryNumber}</p>
           <p className="text-xl text-gray-500 mt-2">SN: {asset.serialNumber}</p>
         </div>
-        <QRCodeSVG value={asset.id} size={400} level="H" includeMargin={true} />
+        <QRCodeSVG value={`${window.location.origin}/assets/${asset.id}`} size={400} level="H" includeMargin={true} />
         <p className="mt-8 text-gray-400 text-sm">Smart Office Asset Manager</p>
       </div>
     </div>

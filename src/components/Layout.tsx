@@ -1,12 +1,20 @@
 import React from 'react';
-import { Link, Outlet, useLocation } from 'react-router-dom';
-import { QrCode, LayoutDashboard, Package, UserCircle, Users, Settings } from 'lucide-react';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { QrCode, LayoutDashboard, Package, Users, Settings, LogOut } from 'lucide-react';
 import { useStore } from '../store/StoreContext';
+import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../lib/utils';
 
 export const Layout: React.FC = () => {
-  const { users, currentUser, setCurrentUser } = useStore();
+  const { currentUser } = useStore();
+  const { logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   const navItems = [
     { path: '/', label: 'Дашборд', icon: LayoutDashboard },
@@ -49,21 +57,23 @@ export const Layout: React.FC = () => {
                 })}
               </nav>
             </div>
-            <div className="flex items-center">
-              <div className="relative flex items-center gap-2">
-                <UserCircle className="w-5 h-5 text-gray-400" />
-                <select
-                  value={currentUser.id}
-                  onChange={(e) => setCurrentUser(e.target.value)}
-                  className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md bg-slate-50"
-                >
-                  {users.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.name}
-                    </option>
-                  ))}
-                </select>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <div className="text-right">
+                  <p className="text-sm font-medium text-gray-900">{currentUser.name}</p>
+                  <p className="text-xs text-gray-500">
+                    {currentUser.role === 'ADMIN' ? 'Администратор' : currentUser.role === 'AUDITOR' ? 'Аудитор' : 'Сотрудник'}
+                  </p>
+                </div>
               </div>
+              <button
+                onClick={handleLogout}
+                className="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                title="Выйти"
+              >
+                <LogOut className="w-4 h-4 mr-1" />
+                Выйти
+              </button>
             </div>
           </div>
         </div>

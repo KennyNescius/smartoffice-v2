@@ -1,26 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../store/StoreContext';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
-import { Package, CheckCircle, AlertCircle, RefreshCw, Clock, Calendar } from 'lucide-react';
+import { Package, CheckCircle, AlertCircle, RefreshCw, Clock, Calendar, Archive } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { STATUS_LABELS, STATUS_HEX_COLORS } from '../lib/constants';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
 
-const STATUS_COLORS = {
-  REGISTERED: '#3b82f6', // blue
-  ASSIGNED: '#10b981', // green
-  IN_REPAIR: '#f59e0b', // yellow
-  LOST: '#ef4444', // red
-  WRITTEN_OFF: '#6b7280', // gray
-};
-
-const STATUS_LABELS = {
-  REGISTERED: 'На складе',
-  ASSIGNED: 'Выдан',
-  IN_REPAIR: 'В ремонте',
-  LOST: 'Утерян',
-  WRITTEN_OFF: 'Списан',
-};
 
 export const Dashboard: React.FC = () => {
   const { assets } = useStore();
@@ -30,15 +16,19 @@ export const Dashboard: React.FC = () => {
     setIsMounted(true);
   }, []);
 
-  const totalAssets = assets.length;
-  
-  const statusData = Object.entries(STATUS_LABELS).map(([key, label]) => ({
-    name: label,
-    value: assets.filter(a => a.status === key).length,
-    color: STATUS_COLORS[key as keyof typeof STATUS_COLORS]
-  })).filter(d => d.value > 0);
+  // Exclude LOST and WRITTEN_OFF from dashboard
+  const activeAssets = assets.filter(a => a.status !== 'LOST' && a.status !== 'WRITTEN_OFF');
+  const totalAssets = activeAssets.length;
 
-  const categoryMap = assets.reduce((acc, asset) => {
+  const statusData = Object.entries(STATUS_LABELS)
+    .filter(([key]) => key !== 'LOST' && key !== 'WRITTEN_OFF')
+    .map(([key, label]) => ({
+      name: label,
+      value: activeAssets.filter(a => a.status === key).length,
+      color: STATUS_HEX_COLORS[key as keyof typeof STATUS_HEX_COLORS]
+    })).filter(d => d.value > 0);
+
+  const categoryMap = activeAssets.reduce((acc, asset) => {
     acc[asset.category] = (acc[asset.category] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
@@ -50,9 +40,9 @@ export const Dashboard: React.FC = () => {
 
   const statCards = [
     { title: 'Всего активов', value: totalAssets, icon: Package, color: 'text-indigo-600', bg: 'bg-indigo-100' },
-    { title: 'Выдано', value: assets.filter(a => a.status === 'ASSIGNED').length, icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-100' },
-    { title: 'В ремонте', value: assets.filter(a => a.status === 'IN_REPAIR').length, icon: RefreshCw, color: 'text-amber-600', bg: 'bg-amber-100' },
-    { title: 'Утеряно', value: assets.filter(a => a.status === 'LOST').length, icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-100' },
+    { title: 'На складе', value: activeAssets.filter(a => a.status === 'REGISTERED').length, icon: Package, color: 'text-blue-600', bg: 'bg-blue-100' },
+    { title: 'Выдано', value: activeAssets.filter(a => a.status === 'ASSIGNED').length, icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-100' },
+    { title: 'В ремонте', value: activeAssets.filter(a => a.status === 'IN_REPAIR').length, icon: RefreshCw, color: 'text-amber-600', bg: 'bg-amber-100' },
   ];
 
   const expiringAssets = assets
@@ -66,6 +56,9 @@ export const Dashboard: React.FC = () => {
     })
     .filter(a => a.diffDays <= 90)
     .sort((a, b) => a.diffDays - b.diffDays);
+
+  const lostCount = assets.filter(a => a.status === 'LOST').length;
+  const writtenOffCount = assets.filter(a => a.status === 'WRITTEN_OFF').length;
 
   return (
     <div className="space-y-6 pb-20 sm:pb-0">
@@ -200,6 +193,28 @@ export const Dashboard: React.FC = () => {
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Lost & Written Off counters */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="bg-white rounded-xl shadow-sm border border-red-200 p-4 flex items-center space-x-4">
+          <div className="p-3 rounded-full bg-red-100">
+            <AlertCircle className="w-6 h-6 text-red-600" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-slate-500">Утеряно</p>
+            <p className="text-2xl font-bold text-red-600">{lostCount}</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-300 p-4 flex items-center space-x-4">
+          <div className="p-3 rounded-full bg-gray-100">
+            <Archive className="w-6 h-6 text-gray-600" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-slate-500">Списано</p>
+            <p className="text-2xl font-bold text-gray-600">{writtenOffCount}</p>
+          </div>
         </div>
       </div>
     </div>
