@@ -496,6 +496,15 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 
 // ==================== START SERVER ====================
 
+// Serve frontend static files
+const distPath = path.join(__dirname2, '..', 'dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
+
 app.listen(PORT, () => {
   console.log(`SmartOffice API running at http://localhost:${PORT}`);
 });
