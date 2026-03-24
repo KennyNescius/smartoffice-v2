@@ -309,7 +309,7 @@ export const AssetDetails: React.FC = () => {
             {asset.photoUrl ? (
               <div className="space-y-3">
                 <img
-                  src={`http://localhost:3001${asset.photoUrl}`}
+                  src={`${import.meta.env.VITE_API_URL || ''}${asset.photoUrl}`}
                   alt={asset.name}
                   className="w-full rounded-lg border border-gray-200 object-contain bg-gray-50"
                   style={{ maxHeight: '300px' }}

@@ -264,7 +264,7 @@ export const AssetList: React.FC = () => {
                         <div className="flex items-center">
                           {asset.photoUrl ? (
                             <img
-                              src={`http://localhost:3001${asset.photoUrl}`}
+                              src={`${import.meta.env.VITE_API_URL || ''}${asset.photoUrl}`}
                               alt={asset.name}
                               className="h-10 w-10 rounded-lg object-cover border border-gray-200 flex-shrink-0"
                             />
