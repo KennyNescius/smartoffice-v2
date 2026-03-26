@@ -25,7 +25,10 @@ export const QRScanner: React.FC = () => {
             scannerRef.current.stop().catch(console.error);
           }
           if (mountedRef.current) {
-            navigate(`/assets/${decodedText}`);
+            // QR may contain full URL (https://.../assets/id) or just the id
+            const match = decodedText.match(/\/assets\/(.+)$/);
+            const assetId = match ? match[1] : decodedText;
+            navigate(`/assets/${assetId}`);
           }
         },
         (err) => {
@@ -74,7 +77,9 @@ export const QRScanner: React.FC = () => {
       }
       
       const decodedText = await scannerRef.current.scanFile(file, true);
-      navigate(`/assets/${decodedText}`);
+      const match = decodedText.match(/\/assets\/(.+)$/);
+      const assetId = match ? match[1] : decodedText;
+      navigate(`/assets/${assetId}`);
     } catch (err) {
       setError("QR-код не найден на изображении. Попробуйте другое фото.");
       startCamera(); // Restart camera if failed
